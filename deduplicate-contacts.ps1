@@ -3,37 +3,20 @@ Param(
     [string]$sourceFile,
     
     [Parameter(Mandatory=$True)]
-    [string]$destinationFile,
+    [string]$destinationFile
+)
 
-    [Parameter(Mandatory=$False)]
-    [string]$threads = 15
+Function Deduplicate {
+    param(
+        [Array]$dups,
+        [System.Collections.ArrayList]$contacts,
+        [System.Collections.ArrayList]$deduppedContacts       
     )
-
-Clear-Host
-Write-Host "Parsing source csv file $($sourceFile)"
-$contacts = Get-Content $sourceFile | ConvertFrom-CSV
-Write-Host "Found $($contacts.Count) contacts"
-
-$timeStart = Get-Date
-$completedContacts = New-Object Collections.Generic.List[PSObject]
-$deduppedContacts = New-Object Collections.Generic.List[PSObject]
-$contacts = $contacts | Where-Object { $_ -notin $completedContacts }
-$i = 0
-$contacts | ForEach-Object -Parallel {
-    $timeStart = Get-Date
-
-    $i = $using:i
-    $contacts = $using:contacts
-    $completedContacts = $using:completedContacts
-    $deduppedContacts = $using:deduppedContacts
-    $contact = $_
-
-    $i++
-    if ($completedContacts -contains $contact) { continue }
-    #Check for duplicates
-    [Array]$dups = $contacts | Where-Object { $_.'First Name' -eq $contact.'First Name' -and $_.'Last Name' -eq $contact.'Last Name' -and $_.'Mobile Phone' -eq $contact.'Mobile Phone' -and $_.'Title' -eq $contact.'Title' -and $_.'E-mail Address' -eq $contact.'E-mail Address'  }
-    if ($dups.Count -gt 1)
+    if ($dups)
     {
+        $timeStart = Get-Date
+
+        $contact = $dups[0]
         #Check for same data on all duplicates
         $propSize = New-Object Collections.Generic.List[Int]
         $dups | ForEach-Object {
@@ -49,18 +32,38 @@ $contacts | ForEach-Object -Parallel {
             Write-Warning "Found mismatch on $($contact.'First Name') $($contact.'Last Name') (Title: $($contact.'Title')) with Mobile Phone $($contact.'Mobile Phone') and E-Mail $($contact.'E-mail Address')"
         }
         Write-Verbose "Found $($dups.Count) duplicates for $($contact.'First Name') $($contact.'Last Name') (title: $($contact.'Title')) with mobile phone $($contact.'Mobile Phone') and e-mail $($contact.'E-mail Address')"
-        $dups | ForEach-Object {
-            [void]$completedContacts.Add($_)
-        }
     }
-    else { [void]$completedContacts.Add($dups) }
-    [void]$deduppedContacts.Add($dups[0])
-    
+    $dups | ForEach-Object {
+        [void]$contacts.Remove($_)
+    }
+    [void]$deduppedContacts.Add($contact)
+
     $timeEnd = Get-Date
     $timeElapsed = $timeEnd-$timeStart
     Write-Verbose "Needed $($timeElapsed.Seconds) seconds to analyze contact $($contact.'First Name') $($contact.'Last Name') (Title: $($contact.'Title')) with Mobile Phone $($contact.'Mobile Phone') and E-Mail $($contact.'E-mail Address')"
     Write-Host "Scanned $($i)/$($contacts.Count) contacts"
-} -ThrottleLimit $threads
+
+    return $contacts
+}
+
+Clear-Host
+Write-Host "Parsing source csv file $($sourceFile)"
+[System.Collections.ArrayList]$contacts = Get-Content $sourceFile | ConvertFrom-CSV
+Write-Host "Found $($contacts.Count) contacts"
+
+$timeStart = Get-Date
+[System.Collections.ArrayList]$deduppedContacts = @()
+$i=0
+while ($contacts.count -gt 0)
+{
+        $contact = $contacts[$i]
+        [Array]$dups = $contacts | Where-Object { $_.'First Name' -eq $contact.'First Name' -and $_.'Last Name' -eq $contact.'Last Name' -and $_.'Mobile Phone' -eq $contact.'Mobile Phone' -and $_.'Title' -eq $contact.'Title' -and $_.'E-mail Address' -eq $contact.'E-mail Address'  }
+
+        $inputContactsCount = $contacts.Count
+        $contacts = Deduplicate -dups $dups -contacts $contacts -deduppedContacts $deduppedContacts
+	if ($inputContactsCount -eq $contacts.Count) { break }
+        $i++
+}
 
 $timeEnd = Get-Date
 $timeElapsed = $timeEnd-$timeStart
