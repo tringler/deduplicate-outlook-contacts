@@ -5,4 +5,4 @@ A simple powershell script to deduplicate outlook contacts. You need to export t
 `deduplicate-contacts.ps1 -sourceFile .\contacts.csv -destinationFile .\deduppedContacts.csv`
 
 ## TBD
-Currently there is no merging of contacts. If multiple version of a contact is found the script print out a warning.
+Currently there is no merging of contacts. If multiple versions of a contact is found the script print out a warning.
